@@ -35,18 +35,43 @@ class EmailClassifierAPI:
         ):
             if not email_text and email_file:
                 content = await email_file.read()
-                email_text = content.decode("utf-8")
+                
+                # Primeira tentativa: chardet
+                try:
+                    import chardet
+                    detected = chardet.detect(content)
+                    encoding = detected['encoding'] or 'utf-8'
+                    self.logger.info(f"Encoding detectado: {encoding}")
+                    email_text = content.decode(encoding)
+                except (ImportError, UnicodeDecodeError) as e:
+                    self.logger.warning(f"Falha com chardet: {e}")
+                    # Fallback: tenta encodings comuns
+                    email_text = None
+                    for encoding in ['utf-8', 'utf-8-sig', 'latin-1', 'cp1252', 'iso-8859-1']:
+                        try:
+                            email_text = content.decode(encoding)
+                            self.logger.info(f"Sucesso com encoding: {encoding}")
+                            break
+                        except UnicodeDecodeError:
+                            continue
+                    
+                    if email_text is None:
+                        # Última tentativa: decode com errors='replace'
+                        try:
+                            email_text = content.decode('utf-8', errors='replace')
+                            self.logger.warning("Usando decode com errors='replace'")
+                        except Exception as e:
+                            return {"error": f"Não foi possível decodificar o arquivo: {str(e)}"}
+                            
             elif not email_text:
                 return {"error": "Nenhum texto fornecido"}
             
-            classification = self.classify_productivity(email_text)
+            classification = self.ai_client.classify_productivity(email_text)
+            
             return {
                 "response": email_text,
                 "category": classification
             }
-
-    def classify_productivity(self, text):
-        return self.ai_client.classify_productivity(text)
 
 # Instancie a API
 email_api = EmailClassifierAPI(model_path="../ai/modelo_treinado")
