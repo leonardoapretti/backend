@@ -22,7 +22,7 @@ class EmailClassifierAPI:
 
         # Inicializar o cliente AI
         try:
-            self.ai_client = AIClient(classification_model_path=model_path)
+            self.ai_client = AIClient()
             self.logger.info("✅ AI Client inicializado com sucesso")
         except Exception as e:
             self.logger.error(f"❌ Erro ao inicializar AI Client: {e}")
@@ -125,7 +125,7 @@ class EmailClassifierAPI:
                 raise HTTPException(status_code=500, detail=f"Erro ao processar email: {str(e)}")
 
 # Instanciar a API
-email_api = EmailClassifierAPI(model_path="F:\\leonardo.pretti\\ai_models")
+email_api = EmailClassifierAPI(model_path="ai_model")
 
 # Para rodar com uvicorn
 app = email_api.app

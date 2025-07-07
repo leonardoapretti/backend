@@ -6,39 +6,14 @@ import google.generativeai as genai
 import os
 
 class AIClient:
-    def __init__(self, classification_model_path="F:\\leonardo.pretti\\ai_models"):
+    def __init__(self):
         load_dotenv()
         self.logger = logging.getLogger(__name__)
-        self.classification_model_path = classification_model_path
-        
-        # Inicializar pipeline de classificação
-        self._init_classification_pipeline()
-        
+
         # Inicializar pipeline de geração de resposta com Gemini
-        self._init_gemini_response_pipeline()
-        
-    def _init_classification_pipeline(self):
-        """Inicializa o pipeline de classificação (seu modelo treinado)"""
-        try:
-            # Carrega o modelo e tokenizer locais
-            self.tokenizer = AutoTokenizer.from_pretrained(self.classification_model_path)
-            self.classification_model = AutoModelForSequenceClassification.from_pretrained(self.classification_model_path)
-            
-            # Cria o pipeline de classificação
-            self.classifier = pipeline(
-                "text-classification",
-                model=self.classification_model,
-                tokenizer=self.tokenizer,
-                device=0 if torch.cuda.is_available() else -1  # GPU se disponível
-            )
-            
-            self.logger.info(f"✅ Pipeline de classificação carregado de: {self.classification_model_path}")
-            
-        except Exception as e:
-            self.logger.error(f"❌ Erro ao carregar modelo de classificação: {e}")
-            raise
+        self._init_gemini_pipeline()
     
-    def _init_gemini_response_pipeline(self):
+    def _init_gemini_pipeline(self):
         """Inicializa o pipeline de geração de resposta com Gemini"""
         try:
             # Configurar API do Gemini
@@ -50,7 +25,6 @@ class AIClient:
             
             genai.configure(api_key=gemini_api_key)
             
-            # Usar o modelo Gemini Flash (mais rápido e com maior cota gratuita)
             self.gemini_model = genai.GenerativeModel("gemini-1.5-flash")
             
             self.logger.info("✅ Pipeline de resposta Gemini configurado com sucesso")
@@ -58,62 +32,9 @@ class AIClient:
         except Exception as e:
             self.logger.error(f"❌ Erro ao configurar Gemini: {e}")
             self.gemini_model = None
-        
-    def generate_content(self, contents: str):
-        """
-        Usa o modelo local para classificar o conteúdo
-        """
-        try:
-            # Faz a predição usando o pipeline
-            result = self.classifier(contents)
-            self.logger.info(f"Resultado da classificação: {result}")
-            
-            # Retorna o resultado com maior confiança
-            if isinstance(result, list) and len(result) > 0:
-                return result[0]
-            return result
-            
-        except Exception as e:
-            self.logger.error(f"Erro ao classificar conteúdo: {e}")
-            return None
-        
-    def classify_productivity(self, text: str):
-        """Classifica se o texto é produtivo ou improdutivo"""
-        try:
-            max_length = 512
-            if len(text) > max_length:
-                text = text[:max_length]
-            
-            self.logger.info(f"Classificando texto: {text[:100]}...")
-            
-            result = self.generate_content(text)
-            self.logger.info("resultado: " + str(result))
-            
-            if result is None:
-                return "Erro ao classificar"
-            
-            label = result.get('label', '').lower()
-            score = result.get('score', 0)
-            
-            self.logger.info(f"Label: {label}, Score: {score}")
-            
-            # Determina o resultado final
-            if 'produtivo' == label:
-                resultado_final = "Produtivo"
-            elif 'improdutivo' == label:
-                resultado_final = "Improdutivo"
-            else:
-                # Fallback: se não reconhecer a label, usa o score
-                resultado_final = "Produtivo" if score > 0.5 else "Improdutivo"
-            
-            self.logger.info(f"Retornando para o front: {resultado_final}")
-            return resultado_final
-            
-        except Exception as e:
-            self.logger.error(f"Erro na classificação: {e}")
-            return "Improdutivo"
     
-    def generate_response(self, text: str, context: str = None, force_response: bool = False):
+    
+    def generate_response(self, text: str, classification, context: str = None, force_response: bool = False):
         """
         Gera uma resposta sugerida para o texto usando Gemini
         
@@ -130,10 +51,7 @@ class AIClient:
                     "response": None,
                     "classification": None
                 }
-            
-            # Primeiro, classifica se é produtivo
-            classification = self.classify_productivity(text)
-            
+                        
             # Se não forçar resposta e for improdutivo, não gera resposta
             if not force_response and classification.lower() == "improdutivo":
                 return {
@@ -161,7 +79,8 @@ class AIClient:
                 "response": None,
                 "classification": None
             }
-    
+            
+        
     def _generate_gemini_response(self, text: str, context: str = None, classification: str = None):
         """Gera resposta usando Gemini"""
         try:
@@ -209,6 +128,48 @@ class AIClient:
         except Exception as e:
             self.logger.error(f"Erro ao gerar resposta com Gemini: {e}")
             return f"Erro ao gerar resposta: {str(e)}"
+        
+    def _generate_gemini_classification(self, text: str, context: str = None, classification: str = None):
+        """Gera resposta usando Gemini"""
+        try:
+            system_instruction = """Você é um assistente profissional. 
+            Classifique a mensagem recebida em "produtivo" ou "improdutivo, considerando o contexto empresarial."""
+            
+            # Construir o prompt
+            prompt_parts = [
+                system_instruction,
+                f"\nMensagem recebida: \"{text}\"",
+            ]
+            
+            if context:
+                prompt_parts.append(f"\nContexto adicional: {context}")
+            
+            if classification:
+                prompt_parts.append(f"\nClassificação da mensagem: {classification}")
+            
+            prompt_parts.extend([
+                "\nInstruções:",
+                "- Gere uma resposta de apenas uma palavra",
+                "- Considere que o texto foi recebido de um e-mail",
+                "- Textos que tratam sobre reuniões empresariais, projetos, demandas, dentre outros, são considerados produtivos",
+                "- Textos que tratam sobre correntes, festas, eventos pessoais, são considerados improdutivos",
+                "- Responda em português brasileiro",
+                "\nClassificação:"
+            ])
+            
+            prompt = "\n".join(prompt_parts)
+            
+            # Gerar resposta com Gemini
+            response = self.gemini_model.generate_content(prompt)
+            
+            if response and response.text:
+                return response.text.strip()
+            else:
+                return "Não foi possível gerar uma resposta adequada."
+            
+        except Exception as e:
+            self.logger.error(f"Erro ao gerar resposta com Gemini: {e}")
+            return f"Erro ao gerar resposta: {str(e)}"
     
     def analyze_and_respond(self, text: str, context: str = None):
         """
@@ -219,10 +180,10 @@ class AIClient:
         """
         try:
             # Classificar o texto
-            classification = self.classify_productivity(text)
+            classification = self._generate_gemini_classification(text)
             
             # Gerar resposta (apenas para textos produtivos por padrão)
-            response_result = self.generate_response(text, context)
+            response_result = self.generate_response(text, classification, context)
             
             return {
                 "text": text,
@@ -269,53 +230,3 @@ class AIClient:
             },
             "device": "GPU" if torch.cuda.is_available() else "CPU"
         }
-
-# Exemplo de uso
-if __name__ == "__main__":
-    # Configurar logging
-    logging.basicConfig(level=logging.INFO)
-    
-    try:
-        # Inicializar o cliente AI
-        ai_client = AIClient()
-        
-        # Verificar se os modelos foram carregados
-        model_info = ai_client.get_model_info()
-        print("Informações dos modelos:", model_info)
-        
-        # Exemplos de teste
-        exemplos = [
-            "Vamos marcar uma reunião para discutir o projeto amanhã?",
-            "Preciso de ajuda com a implementação da nova funcionalidade",
-            "Oi, tudo bem? Vamos tomar um café?",
-            "O projeto foi entregue com sucesso, parabéns à equipe!",
-            "Minhas compras chegaram hoje"
-        ]
-        
-        print("\n" + "="*80)
-        print("TESTANDO CLASSIFICAÇÃO E GERAÇÃO DE RESPOSTA")
-        print("="*80)
-        
-        for i, exemplo in enumerate(exemplos, 1):
-            print(f"\n{i}. Texto: '{exemplo}'")
-            print("-" * 60)
-            
-            # Análise completa
-            resultado = ai_client.analyze_and_respond(exemplo)
-            
-            # Exibir classificação
-            classification = resultado['classification']
-            emoji = "✅" if classification['is_productive'] else "❌"
-            print(f"   Classificação: {emoji} {classification['label']}")
-            
-            # Exibir resposta
-            response_data = resultado['response']
-            if response_data['success'] and response_data['response']:
-                print(f"   Resposta sugerida: '{response_data['response']}'")
-            else:
-                print(f"   {response_data['message']}")
-            
-            print("-" * 60)
-        
-    except Exception as e:
-        print(f"❌ Erro ao executar exemplo: {e}")
