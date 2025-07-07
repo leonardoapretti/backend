@@ -11,7 +11,7 @@ class EmailClassifierAPI:
         logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
         self.logger = logging.getLogger(__name__)
         self.model_path = model_path
-        self.allowed_origins = allowed_origins or ["http://localhost:5173"]
+        self.allowed_origins = allowed_origins or ["http://localhost:5173", "https://email-classifier-frontend-eta.vercel.app/"]
 
         self.app = FastAPI(
             title="AutoU AI API",
