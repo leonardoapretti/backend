@@ -1,7 +1,5 @@
-from transformers import pipeline, AutoTokenizer, AutoModelForSequenceClassification
 from dotenv import load_dotenv
 import logging 
-import torch
 import google.generativeai as genai
 import os
 
