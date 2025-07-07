@@ -1,10 +1,10 @@
-# AutoU Case
+# Classificador de e-mails
 
 Este projeto é uma aplicação Python para automação de tarefas utilizando inteligência artificial. Ele foi desenvolvido para ser modular, de fácil manutenção e integração com diferentes serviços de IA.
 
 ## Visão Geral
 
-O AutoU Case permite a execução de rotinas automatizadas, integrando-se a serviços de IA por meio de um cliente dedicado. O projeto pode ser adaptado para diferentes fluxos de trabalho, conforme a necessidade do usuário.
+O Classificador de e-mails permite a execução de rotinas automatizadas, integrando-se a serviços de IA por meio de um cliente dedicado. O projeto pode ser adaptado para diferentes fluxos de trabalho, conforme a necessidade do usuário.
 
 ## Requisitos
 
