@@ -7,11 +7,16 @@ import logging
 from ai_client import AIClient
 
 class EmailClassifierAPI:
-    def __init__(self, model_path: str, allowed_origins=None):
+    def __init__(self, model_path: str):
         logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
         self.logger = logging.getLogger(__name__)
         self.model_path = model_path
-        self.allowed_origins = allowed_origins or ["http://localhost:5173", "https://email-classifier-frontend-eta.vercel.app/"]
+
+        self.allowed_origins = [
+            "http://localhost:5173",
+            "https://email-classifier-frontend-eta.vercel.app",
+            "https://email-classifier-frontend-e2mwlemm7-leonardoaprettis-projects.vercel.app",
+        ]
 
         self.app = FastAPI(
             title="AutoU AI API",
@@ -20,7 +25,6 @@ class EmailClassifierAPI:
         )
         self._setup_middleware()
 
-        # Inicializar o cliente AI
         try:
             self.ai_client = AIClient()
             self.logger.info("✅ AI Client inicializado com sucesso")
@@ -46,25 +50,11 @@ class EmailClassifierAPI:
             email_file: UploadFile = File(None),
             context: Optional[str] = Form(None)
         ):
-            """
-            Processa um email: classifica produtividade e gera resposta automaticamente
-
-            Args:
-                email_text: Texto do email (opcional se email_file for fornecido)
-                email_file: Arquivo de texto do email (opcional se email_text for fornecido)
-                context: Contexto adicional para geração de resposta (opcional)
-
-            Returns:
-                dict: Resultado com classificação e resposta gerada
-            """
             if not self.ai_client:
                 raise HTTPException(status_code=503, detail="AI Client não inicializado")
 
-            # Extrair texto do email
             if not email_text and email_file:
                 content = await email_file.read()
-
-                # Tentar decodificar o arquivo
                 try:
                     import chardet
                     detected = chardet.detect(content)
@@ -73,7 +63,6 @@ class EmailClassifierAPI:
                     email_text = content.decode(encoding)
                 except (ImportError, UnicodeDecodeError) as e:
                     self.logger.warning(f"Falha com chardet: {e}")
-                    # Fallback: tenta encodings comuns
                     email_text = None
                     for encoding in ['utf-8', 'utf-8-sig', 'latin-1', 'cp1252', 'iso-8859-1']:
                         try:
@@ -84,7 +73,6 @@ class EmailClassifierAPI:
                             continue
 
                     if email_text is None:
-                        # Última tentativa: decode com errors='replace'
                         try:
                             email_text = content.decode('utf-8', errors='replace')
                             self.logger.warning("Usando decode com errors='replace'")
@@ -94,14 +82,9 @@ class EmailClassifierAPI:
             elif not email_text:
                 raise HTTPException(status_code=400, detail="Nenhum texto ou arquivo fornecido")
 
-            # Processar email: classificar + gerar resposta
             try:
                 self.logger.info(f"Processando email: {email_text[:100]}...")
-
-                # Usar o método analyze_and_respond que já faz tudo
                 result = self.ai_client.analyze_and_respond(email_text, context)
-
-                # Formatar resposta para o frontend
                 classification = result['classification']
                 response_data = result['response']
 
@@ -127,10 +110,8 @@ class EmailClassifierAPI:
 # Instanciar a API
 email_api = EmailClassifierAPI(model_path="ai_model")
 
-# Para rodar com uvicorn
 app = email_api.app
 
-# Se executado diretamente
 if __name__ == "__main__":
     import uvicorn
     uvicorn.run(app, host="0.0.0.0", port=8001)
